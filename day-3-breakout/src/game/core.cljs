@@ -13,6 +13,15 @@
 (def pw 80)
 (def bs 5)
 
+(defn abs [x] (.abs js/Math x))
+(defn sin [x] (.sin js/Math x))
+(defn cos [x] (.cos js/Math x))
+(defn floor [x] (.floor js/Math x))
+
+(defn ball-v [angle]
+  [(floor (* (cos angle) bs))
+   (floor (* (sin angle) bs))])
+
 (def init-level
   (for [[c y] (map vector
                    ["red" "orange" "yellow" "green" "blue"]
@@ -21,10 +30,11 @@
     [(* x 40) (* y 20) c]))
 
 (def init-state
-  {:px 160, :blocks init-level
-   :pl false, :pr false,
-   :bx 190, :by 360,
-   :xv bs, :yv (- bs)})
+  (let [[xv yv] (ball-v (/ 3.14 4))]
+    {:px 160, :blocks init-level
+     :pl false, :pr false,
+     :bx 190, :by 360,
+     :xv bs, :yv (- bs)}))
 
 (defonce game-state (atom init-state))
 
@@ -56,8 +66,21 @@
       (> by (+ y 20))
       (< (+ x 20) by)))
 
-(defn block-bounce [bx by [x y _]]
-  (let [dx ]))
+(defn block-bounce [{:keys [bx by xv yv] :as state} [x y _]]
+  (let [[new-xv new-yv] (cond (<= by (- y 10)) [xv (- yv)]
+                              (>= by (+ y 10)) [xv (- yv)]
+                              (< bx x) [(- xv) yv]
+                              :else [(- xv) yv])]
+    #_(.log js/console (str [xv yv] [new-xv new-yv]))
+    (assoc state :xv new-xv :yv new-yv)))
+
+(defn pad-bounce [{:keys [bx px] :as state}]
+  (let [bc (+ bx 10)
+        pc (+ px 20)
+        offset (/ 3.14 2)
+        angle (+ offset (* (- pc bc) (/ 3.14 2)))
+        [xv yv] (ball-v angle)]
+    (assoc state :xv xv :yv yv)))
 
 (defn update-state [{:keys [pl pr px bx by xv yv blocks] :as state}]
   (let [pv (+ (if pl -10 0) (if pr 10 0))
@@ -70,12 +93,12 @@
         (update :bx + xv)
         (update :by + yv)
         (update :blocks (partial filter (partial not-touching bx by)))
-        (cond-> (< bx 0) (assoc :xv bs)
-                (> bx 380) (assoc :xv (- bs))
-                (< by 0) (assoc :yv bs)
+        (cond-> (< bx 0) (assoc :xv (abs xv))
+                (> bx 380) (assoc :xv (- (abs xv)))
+                (< by 0) (assoc :yv (abs yv))
                 (and (> by 360)
-                     (bp-coll bx px)) (assoc :yv (- bs))
-                coll-block (block-bounce bx by coll-block)
+                     (bp-coll bx px)) (pad-bounce)
+                coll-block (block-bounce coll-block)
                 (> by 400) (assoc
                             :bx (+ px 30)
                             :by (:by init-state)
